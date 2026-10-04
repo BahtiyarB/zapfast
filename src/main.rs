@@ -226,7 +226,16 @@ fn run() -> eframe::Result<()> {
         return Err(eframe::Error::AppCreation(error.into()));
     }
     let settings = settings::Settings::load(&dirs.settings_file());
-    let demo_persistence = demo.then(|| dirs.state.join("window.ron"));
+    // Demo runs keep their window file in their temporary state directory;
+    // a portable build keeps it in its data folder instead of the platform's
+    // own, so the folder travels complete.
+    let persistence_path = if demo {
+        Some(dirs.state.join("window.ron"))
+    } else if dirs.data_override_file.is_some() {
+        Some(dirs.config.join("window.ron"))
+    } else {
+        None
+    };
 
     #[allow(unused_mut)]
     let mut app = if demo {
@@ -277,7 +286,7 @@ fn run() -> eframe::Result<()> {
             // a reopened window (tray, notification, Wayland reopen) uses
             // what the last one remembered, not what the process started
             // with. Demo runs keep their fixed screenshot size.
-            let geometry = if demo_persistence.is_some() {
+            let geometry = if demo {
                 zapfast::window::Geometry::default()
             } else {
                 lease.peek(|app: &app::App| app.settings.window_geometry())
@@ -300,7 +309,7 @@ fn run() -> eframe::Result<()> {
             });
             eframe::run_native(
                 "ZapFast",
-                native_options(demo_persistence.clone(), geometry),
+                native_options(demo, persistence_path.clone(), geometry),
                 Box::new(move |cc| {
                     let mut app = lease.take(&cc.egui_ctx);
                     app.attach(&cc.egui_ctx);
@@ -414,11 +423,11 @@ fn tour_script(name: &str) -> zapfast::demo::tour::Script {
 }
 
 fn native_options(
-    demo_persistence: Option<std::path::PathBuf>,
+    demo: bool,
+    persistence_path: Option<std::path::PathBuf>,
     geometry: zapfast::window::Geometry,
 ) -> eframe::NativeOptions {
     let default_size = demo_size_arg().unwrap_or([1180.0, 780.0]);
-    let demo = demo_persistence.is_some();
     let viewport = egui::ViewportBuilder::default()
         .with_title(if demo { "ZapFast Demo" } else { "ZapFast" })
         .with_app_id(if demo {
@@ -446,7 +455,7 @@ fn native_options(
         .with_title_shown(false);
     eframe::NativeOptions {
         viewport,
-        persistence_path: demo_persistence,
+        persistence_path,
         // Do not restore window size during fixed-size screenshot runs.
         persist_window: !demo,
         ..Default::default()

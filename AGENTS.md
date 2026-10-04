@@ -288,6 +288,11 @@ protocol. These notes are for coding agents and new contributors.
   (`fastsapp`, then `fastwhatsapp`) over once, so the linked device survives
   the rename. Migration runs after the single-instance guard and outside demos;
   keep the guard's `fastsapp:` wire identity compatible with running old copies.
+  On Windows, a portable build (the release archive's `zapfast-portable.txt`
+  beside the executable, the marker the updater also reads) keeps its data in
+  a `Data` folder next to it; Settings moves that root by writing
+  `zapfast-data.txt` beside the executable, which `discover` reads before
+  anything else opens.
 - The app outlives the window, as in Spotifast: `main` hands the app to
   `fastframe_shell::Shell`, which runs `eframe::run_native` in a loop through
   App's `Resident` impl; closing the window with "keep running"

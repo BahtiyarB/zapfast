@@ -1547,3 +1547,28 @@ msgstr ""
 #, rust-format
 msgid "{count} unread chats"
 msgstr ""
+
+#: src/ui/settings.rs:717
+msgid "restart ZapFast to apply"
+msgstr ""
+
+#: src/ui/settings.rs:728
+msgid "Data folder"
+msgstr ""
+
+#: src/app.rs:5486
+msgid "Only a portable build can move its data folder."
+msgstr ""
+
+#: src/app.rs:5495
+#, rust-format
+msgid "Data folder set. Restart ZapFast to move to {folder}."
+msgstr ""
+
+#: src/app.rs:5500
+msgid "Data folder reset. Restart ZapFast to move back to the default."
+msgstr ""
+
+#: src/app.rs:5507
+msgid "Could not set the data folder"
+msgstr ""

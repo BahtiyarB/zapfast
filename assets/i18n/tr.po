@@ -1607,3 +1607,28 @@ msgid ""
 "keep their copy. Connect to WhatsApp to delete it. This cannot be undone."
 msgstr ""
 
+
+#: src/ui/settings.rs:717
+msgid "restart ZapFast to apply"
+msgstr "uygulamak için ZapFast'i yeniden başlatın"
+
+#: src/ui/settings.rs:728
+msgid "Data folder"
+msgstr "Veri klasörü"
+
+#: src/app.rs:5486
+msgid "Only a portable build can move its data folder."
+msgstr "Yalnızca portable sürüm veri klasörünü taşıyabilir."
+
+#: src/app.rs:5495
+#, rust-format
+msgid "Data folder set. Restart ZapFast to move to {folder}."
+msgstr "Veri klasörü seçildi. {folder} klasörüne taşınmak için ZapFast'i yeniden başlatın."
+
+#: src/app.rs:5500
+msgid "Data folder reset. Restart ZapFast to move back to the default."
+msgstr "Veri klasörü sıfırlandı. Varsayılana dönmek için ZapFast'i yeniden başlatın."
+
+#: src/app.rs:5507
+msgid "Could not set the data folder"
+msgstr "Veri klasörü ayarlanamadı"

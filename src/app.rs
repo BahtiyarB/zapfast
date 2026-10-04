@@ -2778,6 +2778,11 @@ impl App {
                     self.actions.push(Action::SetDownloadFolder(Some(path)));
                 }
             }
+            Event::DataFolderPicked(path) => {
+                if live {
+                    self.actions.push(Action::SetDataFolder(Some(path)));
+                }
+            }
             Event::WallpaperImagePicked(Ok(path)) => {
                 // The copy may keep the earlier one's name: decode it anew.
                 self.account_mut().settings.wallpaper_image = Some(path);
@@ -5473,6 +5478,38 @@ impl App {
             }
             Action::PreviewSound(sound) => crate::notify::play_sound(sound),
             Action::PickDownloadFolder => self.backend.send(Command::PickDownloadFolder),
+            Action::PickDataFolder => self.backend.send(Command::PickDataFolder),
+            Action::SetDataFolder(folder) => {
+                let Some(file) = self.dirs.data_override_file.clone() else {
+                    self.toast_error(crate::i18n::gettext(
+                        self.locale,
+                        "Only a portable build can move its data folder.",
+                    ));
+                    return;
+                };
+                match AppDirs::write_data_override(&file, folder.as_deref()) {
+                    Ok(()) => {
+                        let message = match &folder {
+                            Some(folder) => crate::i18n::gettext(
+                                self.locale,
+                                "Data folder set. Restart ZapFast to move to {folder}.",
+                            )
+                            .replace("{folder}", &folder.display().to_string()),
+                            None => crate::i18n::gettext(
+                                self.locale,
+                                "Data folder reset. Restart ZapFast to move back to the default.",
+                            )
+                            .to_string(),
+                        };
+                        self.toast(message);
+                    }
+                    Err(error) => {
+                        let message =
+                            crate::i18n::gettext(self.locale, "Could not set the data folder");
+                        self.toast_error(format!("{message}: {error}"));
+                    }
+                }
+            }
             Action::SetProfile { name, about } => {
                 self.backend.send(Command::SetProfile { name, about });
             }

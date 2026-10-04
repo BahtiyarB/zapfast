@@ -37,6 +37,15 @@ On macOS, settings, state, and the logs are in
 `%LOCALAPPDATA%\paolino\zapfast\data`, and the caches in
 `%LOCALAPPDATA%\paolino\zapfast\cache`.
 
+The Windows portable zip keeps everything beside the program instead: a
+`Data` folder next to `zapfast.exe` holds the config, the state (including
+the logs), and the caches. **Settings > Files > Data folder** moves it: pick
+a folder, restart ZapFast, and that folder holds everything from then on.
+The new folder starts empty; with ZapFast closed, copying the contents of
+the old one in keeps the chats and settings. The archive's key stays in
+Windows Credential Manager, so a copied `Data` folder opens only on the
+computer that linked it.
+
 On first start, ZapFast moves the corresponding `fastsapp` directories (or
 `fastwhatsapp` from earlier versions), including the session, archive, saved
 stickers, and window state. Existing ZapFast directories are never overwritten.
@@ -155,7 +164,9 @@ name or description, in the interface language or in English.
 
 **Account** edits your WhatsApp name, About, and picture, and unlinks this
 computer. **Files** shows the archive, the downloads folder (which you can
-change; earlier downloads stay where they are), and this run's log.
+change; earlier downloads stay where they are), the data folder of a
+portable build (which you can change; it applies at the next start), and
+this run's log.
 
 Some choices are made where they are used and remembered in `settings.json`:
 the shortcut hints bar under the composer (its × hides it, and **Show shortcut

@@ -705,6 +705,54 @@ fn sections(app: &App) -> Vec<Section> {
     );
 
     let mut files = Section::new(translated(locale, "Files"));
+    // A portable build keeps its data beside the executable and can move it.
+    if let Some(override_file) = app.dirs.data_override_file.clone() {
+        // An override file waiting for a restart shows where the next start
+        // moves to, and can still be undone.
+        let pending = crate::paths::AppDirs::read_data_override(&override_file);
+        let description = match &pending {
+            Some(folder) => format!(
+                "{} ({})",
+                folder.display(),
+                crate::i18n::gettext(locale, "restart ZapFast to apply")
+            ),
+            None => app
+                .dirs
+                .data_root()
+                .map(|path| path.display().to_string())
+                .unwrap_or_default(),
+        };
+        let pending = pending.is_some();
+        files.row(
+            translated(locale, "Data folder"),
+            description,
+            move |ui, app| {
+                if theme::soft_button(
+                    ui,
+                    &palette,
+                    None,
+                    &crate::i18n::gettext(app.locale, "Change…"),
+                    false,
+                )
+                .clicked()
+                {
+                    app.actions.push(Action::PickDataFolder);
+                }
+                if pending
+                    && theme::soft_button(
+                        ui,
+                        &palette,
+                        None,
+                        &crate::i18n::gettext(app.locale, "Use default"),
+                        false,
+                    )
+                    .clicked()
+                {
+                    app.actions.push(Action::SetDataFolder(None));
+                }
+            },
+        );
+    }
     // The account on screen: each number keeps its own archive and media.
     let state = app.account().dirs.state.clone();
     let open_folder = crate::i18n::gettext(locale, "Open folder");

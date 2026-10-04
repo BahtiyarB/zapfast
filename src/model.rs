@@ -1722,6 +1722,11 @@ pub enum Action {
     RemoveGroupPicture(ChatId),
     /// Sets or resets (`None`) the folder for new downloads.
     SetDownloadFolder(Option<PathBuf>),
+    /// Asks for a folder to keep a portable build's data in.
+    PickDataFolder,
+    /// Moves a portable build's data root, or resets it (`None`). Applies at
+    /// the next start; the current data stays where it is.
+    SetDataFolder(Option<PathBuf>),
     /// Keeps archived chats archived when a new message comes, or not.
     SetKeepChatsArchived(bool),
     /// Saves the proxy setting and reconnects. Empty follows the environment.

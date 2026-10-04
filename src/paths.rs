@@ -1,13 +1,24 @@
 //! Where ZapFast keeps its files.
 //!
 //! Configuration, session state, and caches use separate standard platform
-//! directories. Clearing a cache does not remove device keys.
+//! directories. Clearing a cache does not remove device keys. A Windows
+//! portable build keeps all of them beside its executable instead.
 
 use std::path::{Path, PathBuf};
 
 use directories::ProjectDirs;
 
 use crate::model::AccountId;
+
+/// The marker a portable release archive ships beside the executable, with
+/// the content the updater also recognises.
+const PORTABLE_MARKER_FILE: &str = "zapfast-portable.txt";
+const PORTABLE_MARKER_CONTENT: &str = "zapfast-portable-v1";
+/// The portable build's data folder, beside the executable.
+const PORTABLE_DATA_DIR: &str = "Data";
+/// Written by Settings to move a portable build's data root. The settings
+/// file lives inside the data root, so this choice cannot be stored there.
+const DATA_OVERRIDE_FILE: &str = "zapfast-data.txt";
 
 #[derive(Clone, Debug)]
 pub struct AppDirs {
@@ -16,10 +27,17 @@ pub struct AppDirs {
     pub cache: PathBuf,
     /// Per-user directory for the single-instance lock and control socket.
     pub runtime: PathBuf,
+    /// For a portable build, the file beside the executable that can move
+    /// its data root, written by Settings. `None` for installed copies,
+    /// demo runs, and tests.
+    pub data_override_file: Option<PathBuf>,
 }
 
 impl AppDirs {
     pub fn discover() -> Self {
+        if let Some(directory) = portable_directory() {
+            return Self::portable_from(&directory);
+        }
         match Self::of("zapfast") {
             Some(dirs) => dirs,
             None => {
@@ -29,6 +47,7 @@ impl AppDirs {
                     state: fallback.join("zapfast-state"),
                     cache: fallback.join("zapfast-cache"),
                     runtime: fallback.join("zapfast-run"),
+                    data_override_file: None,
                 }
             }
         }
@@ -46,6 +65,7 @@ impl AppDirs {
             runtime: runtime_dir(&project, &state),
             state,
             cache: project.cache_dir().to_path_buf(),
+            data_override_file: None,
         })
     }
 
@@ -83,7 +103,52 @@ impl AppDirs {
             state: root.join("state"),
             cache: root.join("cache"),
             runtime: root.join("run"),
+            data_override_file: None,
         }
+    }
+
+    /// The folder every other directory sits under, for a portable build.
+    /// `None` for the platform's standard directories, which have no single
+    /// parent.
+    pub fn data_root(&self) -> Option<&Path> {
+        if self.data_override_file.is_some() {
+            self.config.parent()
+        } else {
+            None
+        }
+    }
+
+    /// The data root an override file names. An empty or unreadable file
+    /// counts as absent.
+    pub fn read_data_override(file: &Path) -> Option<PathBuf> {
+        let root = std::fs::read_to_string(file).ok()?;
+        let root = root.trim();
+        (!root.is_empty()).then(|| PathBuf::from(root))
+    }
+
+    /// Writes or clears (`None`) the override file that moves a portable
+    /// build's data root at the next start. Clearing a file that is not
+    /// there succeeds.
+    pub fn write_data_override(file: &Path, root: Option<&Path>) -> std::io::Result<()> {
+        match root {
+            Some(root) => std::fs::write(file, root.as_os_str().to_string_lossy().as_bytes()),
+            None => match std::fs::remove_file(file) {
+                Ok(()) => Ok(()),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                Err(error) => Err(error),
+            },
+        }
+    }
+
+    /// The portable layout: config, state, cache, and the runtime directory
+    /// under one root beside the executable, moved by the override file when
+    /// Settings has written one.
+    fn portable_from(directory: &Path) -> Self {
+        let root = Self::read_data_override(&directory.join(DATA_OVERRIDE_FILE))
+            .unwrap_or_else(|| directory.join(PORTABLE_DATA_DIR));
+        let mut dirs = Self::under(&root);
+        dirs.data_override_file = Some(directory.join(DATA_OVERRIDE_FILE));
+        dirs
     }
 
     pub fn settings_file(&self) -> PathBuf {
@@ -403,6 +468,29 @@ fn runtime_dir(project: &ProjectDirs, state: &Path) -> PathBuf {
     state.with_file_name(name)
 }
 
+/// The executable's folder, when it can be found.
+fn exe_directory() -> Option<PathBuf> {
+    std::env::current_exe()
+        .ok()?
+        .parent()
+        .map(|path| path.to_path_buf())
+}
+
+/// Whether the directory holds a portable build's marker, with the content
+/// the release archive ships and the updater checks for.
+fn has_portable_marker(directory: &Path) -> bool {
+    std::fs::read_to_string(directory.join(PORTABLE_MARKER_FILE))
+        .is_ok_and(|value| value.trim() == PORTABLE_MARKER_CONTENT)
+}
+
+/// A Windows portable build: the release archive's marker sits beside the
+/// executable. Windows only, because the other platforms' portable formats
+/// keep the standard directories.
+fn portable_directory() -> Option<PathBuf> {
+    let directory = exe_directory()?;
+    (cfg!(windows) && has_portable_marker(&directory)).then_some(directory)
+}
+
 /// Rename whole directories so SQLite databases travel with their WAL files.
 /// A failed move stops startup before empty replacement directories are made.
 fn adopt_directory(from: &Path, to: &Path) -> std::io::Result<()> {
@@ -464,6 +552,70 @@ mod tests {
             );
             assert_eq!(std::fs::read(path.join("fixture")).unwrap(), b"preserved");
         }
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn the_portable_marker_is_read_exactly() {
+        let root = root("portable-marker");
+        assert!(!has_portable_marker(&root));
+        std::fs::write(root.join(PORTABLE_MARKER_FILE), b"zapfast-portable-v1\n").unwrap();
+        assert!(has_portable_marker(&root));
+        std::fs::write(root.join(PORTABLE_MARKER_FILE), b"something else").unwrap();
+        assert!(!has_portable_marker(&root));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_portable_build_keeps_its_data_beside_the_executable() {
+        let root = root("portable");
+        let dirs = AppDirs::portable_from(&root);
+        for (dir, name) in [
+            (&dirs.config, "config"),
+            (&dirs.state, "state"),
+            (&dirs.cache, "cache"),
+            (&dirs.runtime, "run"),
+        ] {
+            assert_eq!(dir.as_path(), root.join("Data").join(name).as_path());
+        }
+        assert_eq!(dirs.data_override_file, Some(root.join("zapfast-data.txt")));
+        assert_eq!(dirs.data_root(), Some(root.join("Data").as_path()));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_portable_override_file_moves_the_data_root() {
+        let root = root("portable-override");
+        let target = root.join("elsewhere");
+        std::fs::write(root.join("zapfast-data.txt"), target.display().to_string()).unwrap();
+        let dirs = AppDirs::portable_from(&root);
+        assert_eq!(dirs.config, target.join("config"));
+        assert_eq!(dirs.state, target.join("state"));
+        // The override file stays beside the executable, never in the data.
+        assert_eq!(dirs.data_override_file, Some(root.join("zapfast-data.txt")));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn an_empty_override_file_counts_as_absent() {
+        let root = root("portable-empty-override");
+        std::fs::write(root.join("zapfast-data.txt"), "  \n").unwrap();
+        let dirs = AppDirs::portable_from(&root);
+        assert_eq!(dirs.config, root.join("Data").join("config"));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn an_override_file_can_be_cleared() {
+        let root = root("portable-clear");
+        let file = root.join("zapfast-data.txt");
+        let target = root.join("elsewhere");
+        AppDirs::write_data_override(&file, Some(&target)).unwrap();
+        assert_eq!(AppDirs::read_data_override(&file), Some(target));
+        AppDirs::write_data_override(&file, None).unwrap();
+        assert!(!file.exists());
+        // Clearing again, when there is nothing to clear, still succeeds.
+        AppDirs::write_data_override(&file, None).unwrap();
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -553,12 +705,14 @@ mod tests {
             state: root.join("old/data"),
             cache: root.join("old/cache"),
             runtime: root.join("old/run"),
+            data_override_file: None,
         };
         let new = AppDirs {
             config: root.join("new/data"),
             state: root.join("new/data"),
             cache: root.join("new/cache"),
             runtime: root.join("new/run"),
+            data_override_file: None,
         };
         old.ensure().unwrap();
         std::fs::write(old.session_db(), b"session").unwrap();
